@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>共通部分編集後に複数宛先へメール作成</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        #fileInput {
+            margin-bottom: 20px;
+        }
+
+        .common-edit {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            text-align: left;
+        }
+
+        .common-edit label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .common-edit input[type="text"],
+        .common-edit textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        .common-edit textarea {
+            min-height: 100px;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            font-size: 16px;
+            text-decoration: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 6px;
+            transition: background-color 0.3s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .button:hover {
+            background-color: #0056b3;
+        }
+
+        .info {
+            margin-top: 20px;
+            text-align: left;
+            width: 100%;
+        }
+
+        .info p {
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+
+        .info strong {
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .button {
+                font-size: 14px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <input type="file" id="fileInput" accept=".json">
+        <div id="commonEdit" class="common-edit" style="display: none;">
+            <h2>共通設定</h2>
+            <label for="commonSubject">タイトル:</label>
+            <input type="text" id="commonSubject">
+            <label for="commonBody">本文:</label>
+            <textarea id="commonBody"></textarea>
+            <label for="commonSignature">署名:</label>
+            <textarea id="commonSignature"></textarea>
+        </div>
+        <div id="buttonsContainer" class="button-container">
+            </div>
+        <div id="mailInfo" class="info" style="display: none;">
+            <h2>送信情報</h2>
+            <p><strong>宛先 (To):</strong> <span id="to"></span></p>
+            <p><strong>CC:</strong> <span id="cc"></span></p>
+            <p><strong>BCC:</strong> <span id="bcc"></span></p>
+            <p><strong>タイトル:</strong> <span id="subject"></span></p>
+            <p><strong>本文:</strong> <pre id="body"></pre></p>
+            <p><strong>本文宛先:</strong> <pre id="bodyTo"></pre></p>
+            <p><strong>本文署名:</strong> <pre id="bodySignature"></pre></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('fileInput');
+            const commonEdit = document.getElementById('commonEdit');
+            const commonSubjectInput = document.getElementById('commonSubject');
+            const commonBodyInput = document.getElementById('commonBody');
+            const commonSignatureInput = document.getElementById('commonSignature');
+            const buttonsContainer = document.getElementById('buttonsContainer');
+            const mailInfo = document.getElementById('mailInfo');
+            const toElement = document.getElementById('to');
+            const ccElement = document.getElementById('cc');
+            const bccElement = document.getElementById('bcc');
+            const subjectElement = document.getElementById('subject');
+            const bodyElement = document.getElementById('body');
+            const bodyToElement = document.getElementById('bodyTo');
+            const bodySignatureElement = document.getElementById('bodySignature');
+
+            let jsonData = null;
+
+            fileInput.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            jsonData = JSON.parse(e.target.result);
+                            commonSubjectInput.value = jsonData.subject || '';
+                            commonBodyInput.value = jsonData.body || '';
+                            commonSignatureInput.value = jsonData.本文署名 || '';
+                            commonEdit.style.display = 'block';
+                            buttonsContainer.innerHTML = ''; // 既存のボタンをクリア
+
+                            if (jsonData.recipients && Array.isArray(jsonData.recipients)) {
+                                jsonData.recipients.forEach((recipient, index) => {
+                                    const button = document.createElement('button');
+                                    button.classList.add('button');
+                                    const recipientInfo = [];
+                                    if (recipient.to && recipient.to.length > 0) {
+                                        recipientInfo.push(`To: ${recipient.to.join(', ')}`);
+                                    }
+                                    if (recipient.cc && recipient.cc.length > 0) {
+                                        recipientInfo.push(`CC: ${recipient.cc.join(', ')}`);
+                                    }
+                                    if (recipient.bcc && recipient.bcc.length > 0) {
+                                        recipientInfo.push(`BCC: ${recipient.bcc.join(', ')}`);
+                                    }
+                                    const buttonText = recipientInfo.length > 0 ? `作成 (${recipientInfo.join('; ')})` : `作成 (宛先なし)`;
+                                    button.textContent = buttonText;
+
+                                    button.addEventListener('click', function() {
+                                        const to = recipient.to ? recipient.to.join(',') : '';
+                                        const cc = recipient.cc ? recipient.cc.join(',') : '';
+                                        let bccParam = '';
+                                        if (recipient.bcc && recipient.bcc.length > 0) {
+                                            bccParam = `&bcc=${encodeURIComponent(recipient.bcc.join(','))}`;
+                                        }
+                                        const bodyTo = recipient.本文宛先 || '';
+                                        const currentSubject = commonSubjectInput.value;
+                                        const currentBody = commonBodyInput.value;
+                                        const currentSignature = commonSignatureInput.value;
+                                        const finalBody = `${bodyTo}\n\n${currentBody}\n\n${currentSignature}`;
+
+                                        const mailtoUrl = `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(cc)}${bccParam}&subject=${encodeURIComponent(currentSubject)}&body=${encodeURIComponent(finalBody)}`;
+                                        window.location.href = mailtoUrl;
+
+                                        // 送信情報を表示
+                                        toElement.textContent = recipient.to ? recipient.to.join(', ') : '';
+                                        ccElement.textContent = recipient.cc ? recipient.cc.join(', ') : '';
+                                        bccElement.textContent = recipient.bcc ? recipient.bcc.join(', ') : '';
+                                        subjectElement.textContent = currentSubject;
+                                        bodyElement.textContent = finalBody;
+                                        bodyToElement.textContent = bodyTo;
+                                        bodySignatureElement.textContent = currentSignature;
+                                        mailInfo.style.display = 'block';
+                                    });
+                                    buttonsContainer.appendChild(button);
+                                });
+                            } else {
+                                buttonsContainer.textContent = '有効な宛先リストが見つかりませんでした。';
+                            }
+
+                        } catch (error) {
+                            commonEdit.style.display = 'none';
+                            buttonsContainer.textContent = 'JSONファイルの読み込みに失敗しました: ' + error;
+                        }
+                    };
+                    reader.readAsText(file);
+                } else {
+                    commonEdit.style.display = 'none';
+                    buttonsContainer.textContent = 'JSONファイルを選択してください';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
